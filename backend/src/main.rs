@@ -2,19 +2,30 @@ use axum::{
     routing::{ get },
     Router,
 };
+use tracing::Level;
+use tracing_subscriber::{fmt, EnvFilter};
+mod routers;
+mod controllers;
+mod models;
+mod db;
+mod secrets;
+mod redis;
+use crate::secrets::{SECRET_MANAGER};
 
 #[tokio::main]
 async fn main() {
+    fmt().with_env_filter(EnvFilter::from_default_env().add_directive(Level::DEBUG.into()))
+    .with_target(false)
+    .init();
+
     let app = Router::new()
         .route("/", get(root));
-        // .route("/users", post(create_user));
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let port = SECRET_MANAGER.get("PORT");
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
-// basic handler that responds with a static string
 async fn root() -> &'static str {
     "WELCOME TO Y!"
 }
