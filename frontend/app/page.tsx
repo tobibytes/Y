@@ -128,7 +128,7 @@ const YLandingPage = () => {
               {/* Signup Form */}
               <div>
                 
-                <Button className='h-12' onClick={()=>{router.push('/auth/callback')}}>
+                <Button className='h-12 rounded-full p-2' onClick={()=>{router.push('/auth/callback')}}>
                   <Image src={'/Google__G__logo.svg'} alt="Google Logo" width={36} height={36}/> Continue with Google <ChevronRight className="ml-2"/>
                 </Button>
               </div>
