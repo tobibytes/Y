@@ -20,3 +20,7 @@ T: for<'r> FromRow<'r, PgRow> + Send + Unpin{
         // .expect("Failed to execute query");
     Ok(rows)
 }
+
+pub fn pool() -> &'static Pool<Postgres> {
+    &*DATABASE
+}

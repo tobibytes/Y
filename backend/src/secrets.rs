@@ -24,7 +24,7 @@ impl SecretManager {
         };
         match mode {
             MODE::DEV => {
-                secrets.insert("DB_URI".to_string(), "postgresql://y:y@postgres:5432/y".to_string());
+                secrets.insert("DB_URI".to_string(), "postgresql://y:y@database:5432/y".to_string());
                 secrets.insert("PORT".to_string(), "8000".to_string());
                 secrets.insert("FRONTEND_URL".to_string(), "http://localhost:3000".to_string());
                 secrets.insert("BACKEND_URL".to_string(), "http://localhost:8000".to_string());
