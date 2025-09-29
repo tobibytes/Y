@@ -4,8 +4,9 @@ import { Globe, Users, Zap, ChevronRight} from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import useAPI from '@/api/use-api';
+import ROUTE from '@/api/route';
 const YLandingPage = () => {
-  const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -21,6 +22,9 @@ const YLandingPage = () => {
     { icon: Zap, title: "Simple & fast", description: "No clutter, no noise. Just conversations that flow." }
   ];
 
+
+
+
   useEffect(() => {
     setIsVisible(true);
     const interval = setInterval(() => {
@@ -29,7 +33,12 @@ const YLandingPage = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const MockScreenshot = ({ isActive, index }) => (
+  const {query} = useAPI(ROUTE.GET_OAUTH_URL)
+  const { data, isLoading, error } = query
+  if (isLoading) return <button disabled>Loading…</button>
+  if (error) return <button disabled>Failed</button>
+
+  const MockScreenshot = ({ isActive, index }: {isActive: boolean, index: number}) => (
     <div className={`absolute inset-0 transition-all duration-1000 ease-out ${
       isActive ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12'
     }`}>
@@ -117,7 +126,7 @@ const YLandingPage = () => {
               <div>
                 <h1 className="text-5xl lg:text-6xl font-bold leading-tight mb-4">
                   <span className="bg-gradient-to-r from-gray-900 to-blue-600 bg-clip-text text-transparent">
-                    See what's happening right now.
+                    See what&apos;s happening right now.
                   </span>
                 </h1>
                 <p className="text-xl text-gray-600 mb-8">
@@ -128,7 +137,7 @@ const YLandingPage = () => {
               {/* Signup Form */}
               <div>
                 
-                <Button className='h-12' onClick={()=>{router.push('/auth/callback')}}>
+                <Button className='h-12' onClick={() => window.location.href = (data as { url: string}).url}>
                   <Image src={'/Google__G__logo.svg'} alt="Google Logo" width={36} height={36}/> Continue with Google <ChevronRight className="ml-2"/>
                 </Button>
               </div>

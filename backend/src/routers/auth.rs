@@ -1,9 +1,9 @@
 use axum::extract::Query;
+use axum::response::IntoResponse;
 
 use crate::controllers::AUTHCONTROLLER;
 
-
-pub async fn get_google_oauth_url_route() -> String {
+pub async fn get_google_oauth_url_route() -> impl IntoResponse {
     AUTHCONTROLLER.get_google_oauth_url().await
 }
 
