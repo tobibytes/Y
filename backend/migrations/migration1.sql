@@ -15,6 +15,8 @@ CREATE TABLE "follow" (
 
 CREATE TABLE "user" (
   "id" integer PRIMARY KEY,
+  "email" TEXT,
+  "access_token" TEXT,
   "username" varchar,
   "name" text,
   "bio" varchar,
