@@ -1,0 +1,34 @@
+services:
+  database:
+    container_name: database
+    image: postgres:18
+    environment:
+      POSTGRES_USER: y
+      POSTGRES_PASSWORD: y
+      POSTGRES_DB: y
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+
+  backend:
+    container_name: y-backend
+    build: .
+    env_file:
+      - ./.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - database
+    networks:
+      - default
+
+volumes:
+  postgres_data:
+networks:
+  default:
+      name: app-networks
+      driver: bridge
