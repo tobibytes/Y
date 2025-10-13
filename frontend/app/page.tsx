@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import useAPI from '@/api/use-api';
 import ROUTE from '@/api/route';
 const YLandingPage = () => {
+  const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -138,7 +139,7 @@ const YLandingPage = () => {
               {/* Signup Form */}
               <div>
                 
-                <Button className='h-12' onClick={() => window.location.href = (data as { url: string}).url}>
+                <Button className='h-12' onClick={()=>{router.push('/auth/callback')}}>
                   <Image src={'/Google__G__logo.svg'} alt="Google Logo" width={36} height={36}/> Continue with Google <ChevronRight className="ml-2"/>
                 </Button>
               </div>
