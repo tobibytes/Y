@@ -3,11 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Globe, Users, Zap, ChevronRight} from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { useRouter } from 'next/navigation';
 import useAPI from '@/api/use-api';
 import ROUTE from '@/api/route';
 const YLandingPage = () => {
-  const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
 
