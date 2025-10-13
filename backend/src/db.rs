@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use sqlx::{FromRow, Pool, Postgres, postgres::{ PgPoolOptions, PgRow}};
+use sqlx::{FromRow, Pool, Postgres, query::{QueryAs}, postgres::{ PgPoolOptions, PgArguments, PgRow}};
 use crate::secrets::SECRET_MANAGER;
 
 static DATABASE: Lazy<Pool<Postgres>> = Lazy::new(|| {
@@ -9,18 +9,29 @@ static DATABASE: Lazy<Pool<Postgres>> = Lazy::new(|| {
         .connect_lazy(&db_uri)  
         .expect("invalid DATABASE_URL")
 });
-
-pub async fn run_query<T>(query: &str) -> Result<Vec<T>, sqlx::Error> 
+pub async fn fetch_one_with<T>(
+    sql: &'static str,
+    bind: impl FnOnce(QueryAs<'static, Postgres, T, PgArguments>) -> QueryAs<'static, Postgres, T, PgArguments>,
+) -> Result<T, sqlx::Error>
 where
-T: for<'r> FromRow<'r, PgRow> + Send + Unpin{
-
-    let rows = sqlx::query_as::<_, T>(query)
-        .fetch_all(&*DATABASE)
-        .await?;
-        // .expect("Failed to execute query");
-    Ok(rows)
+    T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+{
+    let q = sqlx::query_as::<_, T>(sql);
+    let q = bind(q);
+    q.fetch_one(&*DATABASE).await
 }
 
-pub fn pool() -> &'static Pool<Postgres> {
-    &*DATABASE
-}
+// pub async fn fetch_all_with<T>(
+//     sql: &'static str,
+//     bind: impl FnOnce(QueryAs<'static, Postgres, T, PgArguments>) -> QueryAs<'static, Postgres, T, PgArguments>,
+// ) -> Result<Vec<T>, sqlx::Error>
+// where
+//     T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+// {
+//     let q = sqlx::query_as::<_, T>(sql);
+//     let q = bind(q);
+//     q.fetch_all(&*DATABASE).await
+// }
+// pub fn pool() -> &'static Pool<Postgres> {
+//     &*DATABASE
+// }

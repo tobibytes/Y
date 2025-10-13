@@ -11,7 +11,7 @@ mod db;
 mod secrets;
 mod redis;
 use crate::secrets::{SECRET_MANAGER};
-use routers::{ get_google_oauth_url_route, google_oauth_callback_route };
+use routers::{ get_google_oauth_url_route, google_oauth_callback_route, me_route };
 use tower_http::trace::TraceLayer;
 use tower_http::cors::{CorsLayer};
 use axum::http::{header::{ ACCEPT,ACCESS_CONTROL_ALLOW_CREDENTIALS, AUTHORIZATION, CONTENT_TYPE, COOKIE}, HeaderValue, Method};
@@ -40,6 +40,7 @@ async fn main() {
         .route("/", get(root))
         .route("/auth/google/url", get(get_google_oauth_url_route))
         .route("/auth/google/callback", get(google_oauth_callback_route))
+        .route("/auth/me", get(me_route))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

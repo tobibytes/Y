@@ -1,5 +1,3 @@
-import useAPI from "./use-api"
-
 export type Method = "GET" | "POST" | "PUT" | "DELETE"
 
  interface RouteDef {
@@ -20,6 +18,12 @@ const ROUTE = {
     url: "/auth/google/callback",
     method: "GET",
   } satisfies RouteDef,
+  OAUTH_ME: {
+    key: "oauth-me",
+    url: "/auth/me",
+    method: "GET",
+  } satisfies RouteDef
+
 } as const
 
 export default ROUTE

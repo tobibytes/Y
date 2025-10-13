@@ -35,6 +35,7 @@ const YLandingPage = () => {
 
   const {query} = useAPI(ROUTE.GET_OAUTH_URL)
   const { data, isLoading, error } = query
+  
   if (isLoading) return <button disabled>Loading…</button>
   if (error) return <button disabled>Failed</button>
 

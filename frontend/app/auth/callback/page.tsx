@@ -5,6 +5,7 @@ import useAPI from "@/api/use-api";
 import ROUTE from "@/api/route";
 
 const Callback: React.FC = () => {
+
   const router = useRouter();
   const params = useSearchParams();
 

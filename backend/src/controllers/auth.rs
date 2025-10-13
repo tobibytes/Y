@@ -1,17 +1,20 @@
-use axum::http::{header::SET_COOKIE, HeaderMap, HeaderValue};
-use axum::response::IntoResponse;
 use axum::Json;
+use axum::http::StatusCode;
+use axum::http::{HeaderMap, HeaderValue, header::SET_COOKIE};
+use axum::response::{IntoResponse, Response};
 use chrono::{Duration, NaiveDateTime, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header as JwtHeader};
-use oauth_axum::{providers::google::GoogleProvider, CustomProvider, OAuthClient};
+use jsonwebtoken::{EncodingKey, Header as JwtHeader, encode};
+use oauth_axum::{CustomProvider, OAuthClient, providers::google::GoogleProvider};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use tracing::{error, info};
 
-use crate::db::pool;
-use crate::models::auth::{
-    AuthCallbackResponse, GoogleTokenResponse, GoogleUserInfo, OauthUrlResponse,
+use crate::db::fetch_one_with;
+use crate::models::user::IdRow;
+use crate::models::{
+    auth::{AuthCallbackResponse, GoogleTokenResponse, GoogleUserInfo, OauthUrlResponse},
+    general::ErrorResponse,
+    user::UserRow,
 };
 use crate::redis::REDISCLIENT;
 use crate::secrets::SECRET_MANAGER;
@@ -39,7 +42,7 @@ impl AuthController {
         }
     }
 
-    pub async fn get_google_oauth_url(&self) -> impl IntoResponse {
+    pub async fn get_google_oauth_url(&self) -> Response {
         let mut url = String::from("");
         self.google_provider
             .clone()
@@ -52,10 +55,17 @@ impl AuthController {
                 |state_e| async {
                     url = match state_e.url_generated {
                         Some(u) => {
-                            REDISCLIENT
-                                .lock()
-                                .unwrap()
-                                .set(&state_e.state, &state_e.verifier);
+                            match REDISCLIENT.lock() {
+                                Ok(mut client) => {
+                                    client.set(&state_e.state, &state_e.verifier);
+                                }
+                                Err(poisoned) => {
+                                    error!(
+                                        "Redis mutex poisoned while saving verifier: {:?}",
+                                        poisoned
+                                    );
+                                }
+                            }
                             u
                         }
                         None => {
@@ -67,32 +77,51 @@ impl AuthController {
             )
             .await
             .ok();
-        Json(OauthUrlResponse { url })
+        Json(OauthUrlResponse { url }).into_response()
     }
 
     pub async fn google_oauth_callback(
         &self,
         queries: std::collections::HashMap<String, String>,
-    ) -> impl IntoResponse {
+    ) -> Response {
         info!("Google OAuth callback queries: {:?}", queries);
         let code = match queries.get("code") {
             Some(v) => v.to_string(),
             None => {
                 error!("Missing 'code' in callback query");
-                let mut headers = HeaderMap::new();
-                return (headers, Json(AuthCallbackResponse { ok: false, user_id: 0, email: None, name: None, avatar: None }));
+                return ErrorResponse::new(
+                    "Missing 'code' in callback query".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
             }
         };
         let state = match queries.get("state") {
             Some(v) => v.to_string(),
             None => {
                 error!("Missing 'state' in callback query");
-                let mut headers = HeaderMap::new();
-                return (headers, Json(AuthCallbackResponse { ok: false, user_id: 0, email: None, name: None, avatar: None }));
+                return ErrorResponse::new(
+                    "Missing 'state' in callback query".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
             }
         };
 
-        let verifier = REDISCLIENT.lock().unwrap().get(&state);
+        let verifier = match REDISCLIENT.lock() {
+            Ok(mut client) => client.get(&state),
+            Err(poisoned) => {
+                error!(
+                    "Redis mutex poisoned while reading verifier: {:?}",
+                    poisoned
+                );
+                return ErrorResponse::new(
+                    "Server concurrency error".to_string(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+                .into_response();
+            }
+        };
 
         // Exchange the code for tokens manually against Google's token endpoint
         let client_id = SECRET_MANAGER.get("GOOGLE_CLIENT_ID");
@@ -101,17 +130,11 @@ impl AuthController {
 
         if verifier.is_empty() {
             error!("Missing PKCE code_verifier for state={}", state);
-            let mut headers = HeaderMap::new();
-            return (
-                headers,
-                Json(AuthCallbackResponse {
-                    ok: false,
-                    user_id: 0,
-                    email: None,
-                    name: None,
-                    avatar: None,
-                }),
-            );
+            return ErrorResponse::new(
+                format!("Missing PKCE code_verifier for state={}", state),
+                StatusCode::BAD_REQUEST,
+            )
+            .into_response();
         }
 
         let http = reqwest::Client::new();
@@ -133,42 +156,41 @@ impl AuthController {
             Ok(r) => r,
             Err(_) => {
                 error!("Token exchange request failed (network)");
-                let mut headers = HeaderMap::new();
-                return (
-                    headers,
-                    Json(AuthCallbackResponse {
-                        ok: false,
-                        user_id: 0,
-                        email: None,
-                        name: None,
-                        avatar: None,
-                    }),
-                );
+                return ErrorResponse::new(
+                    "Token exchange request failed (network)".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
             }
         };
 
         let status = token_resp.status();
         let token_json = token_resp.text().await.unwrap_or_else(|_| "{}".to_string());
         if !status.is_success() {
-            error!("Token exchange failed: status={} body={}", status.as_u16(), token_json);
-            let mut headers = HeaderMap::new();
-            return (
-                headers,
-                Json(AuthCallbackResponse {
-                    ok: false,
-                    user_id: 0,
-                    email: None,
-                    name: None,
-                    avatar: None,
-                }),
+            error!(
+                "Token exchange failed: status={} body={}",
+                status.as_u16(),
+                token_json
             );
+            return ErrorResponse::new(
+                format!(
+                    "Token exchange failed: status={}, body={}",
+                    status.as_u16(),
+                    token_json
+                ),
+                StatusCode::BAD_REQUEST,
+            )
+            .into_response();
         }
 
         let token_parsed: Result<GoogleTokenResponse, _> = serde_json::from_str(&token_json);
         let (access_token_str, expires_in_opt, refresh_token_opt) = match token_parsed {
             Ok(t) => (t.access_token, t.expires_in, t.refresh_token),
             Err(e) => {
-                info!("Token body not JSON object, falling back to raw token string; parse_err={:?}; body={}", e, token_json);
+                info!(
+                    "Token body not JSON object, falling back to raw token string; parse_err={:?}; body={}",
+                    e, token_json
+                );
                 (token_json.trim_matches('"').to_string(), None, None)
             }
         };
@@ -237,13 +259,10 @@ impl AuthController {
         let name = userinfo.name.clone();
         let avatar = userinfo.picture.clone();
 
-        let token_expires_at: Option<NaiveDateTime> = expires_in_opt.map(|sec| {
-            (Utc::now() + Duration::seconds(sec)).naive_utc()
-        });
+        let token_expires_at: Option<NaiveDateTime> =
+            expires_in_opt.map(|sec| (Utc::now() + Duration::seconds(sec)).naive_utc());
 
-        // Upsert user into DB
-        let row = sqlx::query(
-            r#"
+        const UPSERT_USER_QUERY: &str = r#"
             INSERT INTO "user" (
                 "email",
                 "provider",
@@ -267,56 +286,131 @@ impl AuthController {
                 "profile_picture" = EXCLUDED."profile_picture",
                 "updated_at" = NOW()
             RETURNING id
-        "#,
-        )
-        .bind(email.clone())
-        .bind("google")
-        .bind(google_user_id)
-        .bind(access_token_str.clone())
-        .bind(refresh_token_opt.clone())
-        .bind(token_expires_at)
-        .bind(name.clone())
-        .bind(avatar.clone())
-        .fetch_one(pool())
-        .await
-        .unwrap();
+        "#;
+        let result_q = fetch_one_with::<IdRow>(UPSERT_USER_QUERY, |q| {
+            q.bind(email.clone())
+                .bind("google")
+                .bind(google_user_id)
+                .bind(access_token_str.clone())
+                .bind(refresh_token_opt.clone())
+                .bind(token_expires_at)
+                .bind(name.clone())
+                .bind(avatar.clone())
+        })
+        .await;
+        match result_q {
+            Ok(row) => {
+                let user_id = row.id as i64;
 
-        let user_id_i32: i32 = row.get("id");
-        let user_id = user_id_i32 as i64;
+                // Sign JWT for session
+                let exp = (Utc::now() + Duration::days(7)).timestamp() as usize;
+                let claims = Claims { sub: user_id, exp };
+                let jwt = match encode(
+                    &JwtHeader::default(),
+                    &claims,
+                    &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
+                ) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        error!("Failed to sign JWT: {:?}", e);
+                        return ErrorResponse::new(
+                            "Failed to sign session".to_string(),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                        .into_response();
+                    }
+                };
 
-        // Sign JWT for session
-        let exp = (Utc::now() + Duration::days(7)).timestamp() as usize;
-        let claims = Claims { sub: user_id, exp };
-        let jwt = encode(
-            &JwtHeader::default(),
-            &claims,
-            &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
-        )
-        .unwrap();
+                // Set secure HttpOnly cookie (Secure only for https FRONTEND_URL)
+                let frontend_url = SECRET_MANAGER.get("FRONTEND_URL");
+                let secure_flag = frontend_url.starts_with("https://");
+                let cookie = format!(
+                    "session={}; Path=/; HttpOnly; SameSite=Lax{}; Max-Age={}",
+                    jwt,
+                    if secure_flag { "; Secure" } else { "" },
+                    60 * 60 * 24 * 7
+                );
 
-        // Set secure HttpOnly cookie (Secure only for https FRONTEND_URL)
-        let frontend_url = SECRET_MANAGER.get("FRONTEND_URL");
-        let secure_flag = frontend_url.starts_with("https://");
-        let cookie = format!(
-            "session={}; Path=/; HttpOnly; SameSite=Lax{}; Max-Age={}",
-            jwt,
-            if secure_flag { "; Secure" } else { "" },
-            60 * 60 * 24 * 7
-        );
+                let mut headers = HeaderMap::new();
+                let set_cookie = match HeaderValue::from_str(&cookie) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!("Invalid Set-Cookie header value: {:?}", e);
+                        return ErrorResponse::new(
+                            "Server cookie error".to_string(),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                        .into_response();
+                    }
+                };
+                headers.insert(SET_COOKIE, set_cookie);
 
-        let mut headers = HeaderMap::new();
-        headers.insert(SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
+                (
+                    headers,
+                    Json(AuthCallbackResponse {
+                        ok: true,
+                        user_id,
+                        email,
+                        name,
+                        avatar,
+                    }),
+                )
+                    .into_response()
+            }
+            Err(_) => {
+                error!("Could not get Auth Callback Response");
+                return ErrorResponse::new(
+                    "Could not get Auth Callback Response".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
+            }
+        }
+    }
 
-        (
-            headers,
-            Json(AuthCallbackResponse {
-                ok: true,
-                user_id,
-                email,
-                name,
-                avatar,
-            }),
-        )
+    pub async fn me(&self, queries: std::collections::HashMap<String, String>) -> Response {
+        let id = match queries.get("id") {
+            Some(v) => {
+                let ret_v = match v.parse::<i32>() {
+                    Ok(id_parsed) => id_parsed,
+                    Err(e) => {
+                        error!("Invalid 'id' in query: {:?}", e);
+                        return ErrorResponse::new(
+                            "Invalid 'id' in query".to_string(),
+                            StatusCode::BAD_REQUEST,
+                        )
+                        .into_response();
+                    }
+                };
+                ret_v
+            }
+            None => {
+                error!("Missing 'id' in query");
+                return ErrorResponse::new(
+                    "Missing 'id' in query".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
+            }
+        };
+
+        let query_str = r#"
+        SELECT id, email, name, username, profile_picture, is_verified, is_onboarded
+        FROM "user" 
+        WHERE id = $1
+        "#;
+        let result_q = fetch_one_with::<UserRow>(query_str, |q| q.bind(id)).await;
+        match result_q {
+            Ok(user) => Json(user).into_response(),
+            Err(e) => {
+                error!("Could not get user info: {:?}", e);
+                return ErrorResponse::new(
+                    format!("Could not get user info: {:?}", e),
+                    StatusCode::BAD_REQUEST,
+                )
+                .into_response();
+            }
+        }
     }
 }
 

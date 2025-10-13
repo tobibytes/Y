@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
 #[derive(Deserialize, Serialize)]
 pub struct OauthUrlResponse {
@@ -27,7 +28,7 @@ pub struct GoogleUserInfo {
     pub picture: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, FromRow)]
 pub struct AuthCallbackResponse {
     pub ok: bool,
     pub user_id: i64,
@@ -35,3 +36,8 @@ pub struct AuthCallbackResponse {
     pub name: Option<String>,
     pub avatar: Option<String>,
 }
+
+// pub struct Session {
+//     pub user_id: i64,
+//     pub session_token: String,
+// }
