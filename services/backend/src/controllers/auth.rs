@@ -1,10 +1,12 @@
-use axum::http::header::COOKIE;
 use axum::Json;
 use axum::http::StatusCode;
+use axum::http::header::COOKIE;
 use axum::http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use axum::response::{IntoResponse, Response};
 use chrono::{Duration, NaiveDateTime, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header as JwtHeader, Validation, decode, encode,
+};
 use oauth_axum::{CustomProvider, OAuthClient, providers::google::GoogleProvider};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -13,7 +15,7 @@ use tracing::{error, info};
 use crate::db::fetch_one_with;
 use crate::models::{
     auth::{AuthCallbackResponse, GoogleTokenResponse, GoogleUserInfo, OauthUrlResponse},
-    general::{ErrorResponse},
+    general::ErrorResponse,
     user::{IdRow, UserRow},
 };
 use crate::redis::REDISCLIENT;
@@ -368,18 +370,31 @@ impl AuthController {
         }
     }
 
-    pub async fn extract_cookies(self: &Self, headers: HeaderMap) -> Result<i32, (StatusCode, Json<ErrorResponse>)> {
+    pub async fn extract_cookies(
+        self: &Self,
+        headers: HeaderMap,
+    ) -> Result<i32, (StatusCode, Json<ErrorResponse>)> {
         let cookies = match headers.get(COOKIE).and_then(|v| v.to_str().ok()) {
             Some(v) => v,
             None => {
-                return Err(ErrorResponse::new("Missing cookies in header".to_string(), StatusCode::UNAUTHORIZED))
+                return Err(ErrorResponse::new(
+                    "Missing cookies in header".to_string(),
+                    StatusCode::UNAUTHORIZED,
+                ));
             }
         };
-        let session_jwt = cookies.split(';').map(|p| p.trim()).find_map(|p| p.strip_prefix("session=")).map(|v| v.to_string());
+        let session_jwt = cookies
+            .split(';')
+            .map(|p| p.trim())
+            .find_map(|p| p.strip_prefix("session="))
+            .map(|v| v.to_string());
         let session_jwt = match session_jwt {
             Some(v) if !v.is_empty() => v,
             _ => {
-                return Err(ErrorResponse::new("Missing session cookie".to_string(), StatusCode::UNAUTHORIZED))
+                return Err(ErrorResponse::new(
+                    "Missing session cookie".to_string(),
+                    StatusCode::UNAUTHORIZED,
+                ));
             }
         };
         let jwt_secret = SECRET_MANAGER.get("JWT_SECRET");
@@ -391,14 +406,17 @@ impl AuthController {
             Ok(d) => d,
             Err(e) => {
                 error!("Invalid session token: {:?}", e);
-                return Err(ErrorResponse::new("Invalid session".into(), StatusCode::UNAUTHORIZED))
+                return Err(ErrorResponse::new(
+                    "Invalid session".into(),
+                    StatusCode::UNAUTHORIZED,
+                ));
             }
         };
         let user_id_i32 = token_data.claims.sub as i32;
-        return Ok(user_id_i32)
+        return Ok(user_id_i32);
     }
 
-    pub async fn me(self: &Self,  id: i32) -> Result<UserRow, (StatusCode, Json<ErrorResponse>) > {
+    pub async fn me(self: &Self, id: i32) -> Result<UserRow, (StatusCode, Json<ErrorResponse>)> {
         let query_str = r#"
         SELECT id, email, name, username, profile_picture, is_verified, is_onboarded
         FROM "user" 
@@ -412,8 +430,7 @@ impl AuthController {
                 return Err(ErrorResponse::new(
                     format!("Could not get user info: {:?}", e),
                     StatusCode::BAD_REQUEST,
-                )
-                );
+                ));
             }
         }
     }

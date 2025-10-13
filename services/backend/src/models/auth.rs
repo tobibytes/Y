@@ -18,8 +18,8 @@ pub struct GoogleTokenResponse {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GoogleUserInfo {
-    pub id: Option<String>,     // googleapis.com/oauth2/v2
-    pub sub: Option<String>,    // openidconnect.googleapis.com
+    pub id: Option<String>,  // googleapis.com/oauth2/v2
+    pub sub: Option<String>, // openidconnect.googleapis.com
     pub email: Option<String>,
     pub verified_email: Option<bool>,
     pub name: Option<String>,

@@ -1,28 +1,32 @@
 use axum::{
-    routing::{ get, post },
     Router,
     extract::DefaultBodyLimit,
+    routing::{get, post},
 };
 use tracing::Level;
-use tracing_subscriber::{fmt, EnvFilter};
-mod routers;
+use tracing_subscriber::{EnvFilter, fmt};
 mod controllers;
-mod models;
 mod db;
-mod secrets;
+mod models;
 mod redis;
+mod routers;
+mod secrets;
 use crate::{routers::onboard_route, secrets::SECRET_MANAGER};
-use routers::{ get_google_oauth_url_route, google_oauth_callback_route, me_route };
+use axum::http::{
+    HeaderValue, Method,
+    header::{ACCEPT, ACCESS_CONTROL_ALLOW_CREDENTIALS, AUTHORIZATION, CONTENT_TYPE, COOKIE},
+};
+use routers::{get_google_oauth_url_route, google_oauth_callback_route, me_route};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use tower_http::cors::{CorsLayer};
-use axum::http::{header::{ ACCEPT,ACCESS_CONTROL_ALLOW_CREDENTIALS, AUTHORIZATION, CONTENT_TYPE, COOKIE}, HeaderValue, Method};
 #[tokio::main]
 async fn main() {
     let port = SECRET_MANAGER.get("PORT");
     let frontend_url = SECRET_MANAGER.get("FRONTEND_URL");
-    fmt().with_env_filter(EnvFilter::from_default_env().add_directive(Level::DEBUG.into()))
-    .with_target(false)
-    .init();
+    fmt()
+        .with_env_filter(EnvFilter::from_default_env().add_directive(Level::DEBUG.into()))
+        .with_target(false)
+        .init();
 
     let allowed_origin: HeaderValue = frontend_url.parse().expect("Invalid FRONTEND_URL for CORS");
     let cors = CorsLayer::new()
@@ -36,7 +40,13 @@ async fn main() {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT, COOKIE, ACCESS_CONTROL_ALLOW_CREDENTIALS]);
+        .allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            ACCEPT,
+            COOKIE,
+            ACCESS_CONTROL_ALLOW_CREDENTIALS,
+        ]);
     let app = Router::new()
         .route("/", get(root))
         .route("/auth/google/url", get(get_google_oauth_url_route))
@@ -47,7 +57,9 @@ async fn main() {
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
