@@ -1,6 +1,7 @@
 use axum::{
-    routing::{ get },
+    routing::{ get, post },
     Router,
+    extract::DefaultBodyLimit,
 };
 use tracing::Level;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -10,7 +11,7 @@ mod models;
 mod db;
 mod secrets;
 mod redis;
-use crate::secrets::{SECRET_MANAGER};
+use crate::{routers::onboard_route, secrets::SECRET_MANAGER};
 use routers::{ get_google_oauth_url_route, google_oauth_callback_route, me_route };
 use tower_http::trace::TraceLayer;
 use tower_http::cors::{CorsLayer};
@@ -21,7 +22,7 @@ async fn main() {
     let frontend_url = SECRET_MANAGER.get("FRONTEND_URL");
     fmt().with_env_filter(EnvFilter::from_default_env().add_directive(Level::DEBUG.into()))
     .with_target(false)
-    .init(); // Vite uses VITE_ prefix
+    .init();
 
     let allowed_origin: HeaderValue = frontend_url.parse().expect("Invalid FRONTEND_URL for CORS");
     let cors = CorsLayer::new()
@@ -41,6 +42,8 @@ async fn main() {
         .route("/auth/google/url", get(get_google_oauth_url_route))
         .route("/auth/google/callback", get(google_oauth_callback_route))
         .route("/auth/me", get(me_route))
+        .route("/user/onboarding", post(onboard_route))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

@@ -1,6 +1,6 @@
 export type Method = "GET" | "POST" | "PUT" | "DELETE"
 
- interface RouteDef {
+interface RouteDef {
   key: string
   url: string         
   method: Method
@@ -22,6 +22,11 @@ const ROUTE = {
     key: "oauth-me",
     url: "/auth/me",
     method: "GET",
+  } satisfies RouteDef,
+  USER_ONBOARDING: {
+    key: "user-onboarding",
+    url: "/user/onboarding",
+    method: "POST",
   } satisfies RouteDef
 
 } as const
