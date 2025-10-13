@@ -5,7 +5,10 @@ import useAPI from "@/api/use-api";
 import ROUTE from "@/api/route";
 
 const Callback: React.FC = () => {
+  if (typeof window != "undefined") {
 
+console.log(window.location.href)
+  }
   const router = useRouter();
   const params = useSearchParams();
 

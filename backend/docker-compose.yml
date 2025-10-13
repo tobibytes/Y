@@ -38,5 +38,5 @@ volumes:
   postgres_data:
 networks:
   default:
-      name: app-networks
+      name: app-network
       driver: bridge
