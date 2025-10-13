@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "user" (
   "email" TEXT UNIQUE,
   "provider" VARCHAR NOT NULL,
   "provider_user_id" TEXT NOT NULL,
+  "dob" DATE,
   "access_token" TEXT,
   "refresh_token" TEXT,
   "token_expires_at" TIMESTAMP,

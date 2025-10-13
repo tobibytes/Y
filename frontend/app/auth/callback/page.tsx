@@ -23,16 +23,20 @@ console.log(window.location.href)
   });
 
   const { data, isLoading, error, isSuccess } = query as {
-    data?: { ok?: boolean };
+    data?: UserMe;
     isLoading: boolean;
     error: unknown;
     isSuccess: boolean;
   };
 
   useEffect(() => {
-    if (isSuccess && data && data.ok !== false) {
-      // Session cookie set by backend (HttpOnly, Secure when https). Nothing to store on client.
+    if (isSuccess && data) {
+      if (!data.is_onboarded) {
+        router.push("/onboarding")
+      }
+      else {
       router.replace("/");
+      }
     }
   }, [isSuccess, data, router]);
 

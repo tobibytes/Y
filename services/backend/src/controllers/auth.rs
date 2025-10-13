@@ -1,20 +1,22 @@
 use axum::Json;
 use axum::http::StatusCode;
+use axum::http::header::COOKIE;
 use axum::http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use axum::response::{IntoResponse, Response};
 use chrono::{Duration, NaiveDateTime, Utc};
-use jsonwebtoken::{EncodingKey, Header as JwtHeader, encode};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header as JwtHeader, Validation, decode, encode,
+};
 use oauth_axum::{CustomProvider, OAuthClient, providers::google::GoogleProvider};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::db::fetch_one_with;
-use crate::models::user::IdRow;
 use crate::models::{
     auth::{AuthCallbackResponse, GoogleTokenResponse, GoogleUserInfo, OauthUrlResponse},
     general::ErrorResponse,
-    user::UserRow,
+    user::{IdRow, UserRow},
 };
 use crate::redis::REDISCLIENT;
 use crate::secrets::SECRET_MANAGER;
@@ -368,32 +370,53 @@ impl AuthController {
         }
     }
 
-    pub async fn me(&self, queries: std::collections::HashMap<String, String>) -> Response {
-        let id = match queries.get("id") {
-            Some(v) => {
-                let ret_v = match v.parse::<i32>() {
-                    Ok(id_parsed) => id_parsed,
-                    Err(e) => {
-                        error!("Invalid 'id' in query: {:?}", e);
-                        return ErrorResponse::new(
-                            "Invalid 'id' in query".to_string(),
-                            StatusCode::BAD_REQUEST,
-                        )
-                        .into_response();
-                    }
-                };
-                ret_v
-            }
+    pub async fn extract_cookies(
+        self: &Self,
+        headers: HeaderMap,
+    ) -> Result<i32, (StatusCode, Json<ErrorResponse>)> {
+        let cookies = match headers.get(COOKIE).and_then(|v| v.to_str().ok()) {
+            Some(v) => v,
             None => {
-                error!("Missing 'id' in query");
-                return ErrorResponse::new(
-                    "Missing 'id' in query".to_string(),
-                    StatusCode::BAD_REQUEST,
-                )
-                .into_response();
+                return Err(ErrorResponse::new(
+                    "Missing cookies in header".to_string(),
+                    StatusCode::UNAUTHORIZED,
+                ));
             }
         };
+        let session_jwt = cookies
+            .split(';')
+            .map(|p| p.trim())
+            .find_map(|p| p.strip_prefix("session="))
+            .map(|v| v.to_string());
+        let session_jwt = match session_jwt {
+            Some(v) if !v.is_empty() => v,
+            _ => {
+                return Err(ErrorResponse::new(
+                    "Missing session cookie".to_string(),
+                    StatusCode::UNAUTHORIZED,
+                ));
+            }
+        };
+        let jwt_secret = SECRET_MANAGER.get("JWT_SECRET");
+        let token_data = match decode::<Claims>(
+            &session_jwt,
+            &DecodingKey::from_secret(jwt_secret.as_bytes()),
+            &Validation::new(Algorithm::HS256),
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                error!("Invalid session token: {:?}", e);
+                return Err(ErrorResponse::new(
+                    "Invalid session".into(),
+                    StatusCode::UNAUTHORIZED,
+                ));
+            }
+        };
+        let user_id_i32 = token_data.claims.sub as i32;
+        return Ok(user_id_i32);
+    }
 
+    pub async fn me(self: &Self, id: i32) -> Result<UserRow, (StatusCode, Json<ErrorResponse>)> {
         let query_str = r#"
         SELECT id, email, name, username, profile_picture, is_verified, is_onboarded
         FROM "user" 
@@ -401,14 +424,13 @@ impl AuthController {
         "#;
         let result_q = fetch_one_with::<UserRow>(query_str, |q| q.bind(id)).await;
         match result_q {
-            Ok(user) => Json(user).into_response(),
+            Ok(user) => Ok(user),
             Err(e) => {
                 error!("Could not get user info: {:?}", e);
-                return ErrorResponse::new(
+                return Err(ErrorResponse::new(
                     format!("Could not get user info: {:?}", e),
                     StatusCode::BAD_REQUEST,
-                )
-                .into_response();
+                ));
             }
         }
     }

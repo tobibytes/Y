@@ -8,7 +8,7 @@ services:
       POSTGRES_DB: y
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      - ./backend/migrations:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     networks:
@@ -24,9 +24,9 @@ services:
 
   backend:
     container_name: y-backend
-    build: .
+    build: ./backend
     env_file:
-      - ./.env
+      - ./.env.backend
     ports:
       - "8000:8000"
     depends_on:
@@ -34,8 +34,19 @@ services:
     networks:
       - default
 
+  media:
+    container_name: y-media
+    build: ./media
+    env_file:
+      - ./.env.media
+    ports:
+      - "8001:8001"
+    networks:
+      - default
+
 volumes:
   postgres_data:
+  
 networks:
   default:
       name: app-network
