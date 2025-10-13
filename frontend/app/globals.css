@@ -157,8 +157,10 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-optical-sizing: auto;
+    body {
+  @apply bg-background text-foreground;
+  font-family: var(--font-plus-jakarta-sans), "Plus Jakarta Sans", sans-serif;
+  font-optical-sizing: auto;
+}
   }
 }

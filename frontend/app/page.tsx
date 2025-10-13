@@ -4,6 +4,7 @@ import { Globe, Users, Zap, ChevronRight} from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+
 const YLandingPage = () => {
   const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
