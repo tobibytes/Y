@@ -1,3 +1,4 @@
+"use client"
 import {motion} from "motion/react"
 import { Card, CardContent, CardFooter, CardHeader } from "../ui/card"
 import { Heart, MessageCircle, RefreshCwIcon } from "lucide-react"
@@ -21,15 +22,19 @@ const handleClick = () => {
 return(
     
     <motion.div
-    whileHover={{scale: 1.1}}>
-        <Card onClick={()=>{console.log("routing logic here")}}>
-            <CardHeader className="flex gap-4">
+    whileHover={{scale: 1.02, transition: {duration: 0.3}}}>
+        <Card 
+        className="w-xl cursor-pointer rounded-2xl border border-slate-200 bg-gradient-to-br from-stone-50 to-stone-100 py-6 px-2 mx-auto"
+        onClick={()=>{console.log("routing logic here")}}>
+            <CardHeader className="flex gap-4 items-center">
                 <Avatar>
-                    <AvatarImage src={profilePic} />
+                    <AvatarImage
+                    className="w-16 h-16"
+                    src={profilePic}/>
                     <AvatarFallback>SC</AvatarFallback>
                 </Avatar>
                 <div>
-                    <h1>{name}</h1>
+                    <h1 className="text-lg font-bold capitalize">{name}</h1>
                     <p>{userName}</p>
                 </div>
                 
@@ -39,7 +44,7 @@ return(
                 {content}
                
                 {media?.map((medias:string, index:number) => (
-                    <Image key={index} src={medias} alt={`Media ${index + 1}`} />
+                    <Image key={index} src={medias} alt={`Media ${index + 1}`} width={150} height={150}/>
                 ))}
             
             </CardContent>
