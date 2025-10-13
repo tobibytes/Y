@@ -4,6 +4,7 @@ import { Heart, MessageCircle, RefreshCwIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
 export default function Post({name,userName,profilePic,postedAt, content, media, metrics}:{
     name: string,
     userName: string,
@@ -19,12 +20,20 @@ const handleClick = () => {
 }
 return(
     
-    <motion.div>
+    <motion.div
+    whileHover={{scale: 1.1}}>
         <Card onClick={()=>{console.log("routing logic here")}}>
-            <CardHeader>
-                <h1>{name}</h1>
-                <p>{userName}</p>
-                <p>{postedAt}</p>
+            <CardHeader className="flex gap-4">
+                <Avatar>
+                    <AvatarImage src={profilePic} />
+                    <AvatarFallback>SC</AvatarFallback>
+                </Avatar>
+                <div>
+                    <h1>{name}</h1>
+                    <p>{userName}</p>
+                </div>
+                
+                <p className="ml-auto">{postedAt}</p>
             </CardHeader>
             <CardContent>
                 {content}
